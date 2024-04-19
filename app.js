@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
         todos.forEach(function (todo, index) {
             const li = document.createElement('li');
             const todoText = document.createElement('span');
-            todoText.textContent = `${index}: ${todo}`;
+            todoText.textContent = `${index + 1}: ${todo}`;
             li.appendChild(todoText);
 
             const deleteButton = document.createElement('button');
