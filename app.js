@@ -1,84 +1,94 @@
-document.addEventListener('DOMContentLoaded', function () {
-    const todos = JSON.parse(localStorage.getItem('todos')) || [];
+import { db } from './firebaseConfig.js';
+import { collection, doc, addDoc, deleteDoc, updateDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore.js';
 
+document.addEventListener('DOMContentLoaded', function () {
     const todoForm = document.getElementById('todoForm');
     const newTodoInput = document.getElementById('newTodo');
     const todoList = document.getElementById('todoList');
-    const saveButton = document.getElementById('saveButton');
 
-    renderTodos();
+    // Load todos with real-time updates from Firestore
+    loadTodosRealTime();
 
     todoForm.addEventListener('submit', function (event) {
         event.preventDefault();
         addTodo();
     });
 
-    saveButton.addEventListener('click', function () {
-        downloadTodos();
-    });
-
-    function renderTodos() {
-        todoList.innerHTML = '';
-        todos.forEach(function (todo, index) {
-            const li = document.createElement('li');
-            const todoText = document.createElement('span');
-            todoText.textContent = `${index + 1}: ${todo}`;
-            li.appendChild(todoText);
-
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = 'Delete';
-            deleteButton.classList.add('delete');
-            deleteButton.addEventListener('click', function () {
-                deleteTodo(index);
+    function loadTodosRealTime() {
+        onSnapshot(collection(db, 'todos'), (snapshot) => {
+            todoList.innerHTML = ''; // Clear the current list
+            snapshot.forEach(doc => {
+                const todo = doc.data();
+                console.log(`Real-time update: ${todo.title}, ID: ${doc.id}, Completed: ${todo.isCompleted}`);
+                addTodoToDOM(todo.title, doc.id, todo.isCompleted);
             });
-
-            li.appendChild(deleteButton);
-            todoList.appendChild(li);
         });
     }
 
-    function addTodo() {
+    async function addTodo() {
         const newTodo = newTodoInput.value.trim();
         if (newTodo) {
-            todos.push(newTodo);
-            saveTodos();
-            renderTodos();
-            newTodoInput.value = '';
+            try {
+                const docRef = await addDoc(collection(db, 'todos'), {
+                    title: newTodo,
+                    isCompleted: false // New todos are not completed by default
+                });
+                console.log(`Added todo: ${newTodo}, ID: ${docRef.id}`);
+                newTodoInput.value = ''; // Clear input after adding
+            } catch (error) {
+                console.error("Error adding document: ", error);
+            }
         }
     }
 
-    function deleteTodo(index) {
-        todos.splice(index, 1);
-        saveTodos();
-        renderTodos();
+    async function deleteTodo(id) {
+        console.log(`Deleting todo with ID: ${id}`);
+        await deleteDoc(doc(db, 'todos', id));
+        document.getElementById(id).remove();
     }
 
-    function saveTodos() {
-        localStorage.setItem('todos', JSON.stringify(todos));
+    async function toggleComplete(id, isCompleted) {
+        console.log(`Toggling completion for ${id} to ${isCompleted}`);
+        try {
+            await updateDoc(doc(db, 'todos', id), {
+                isCompleted: isCompleted
+            });
+            console.log(`Successfully toggled completion for ${id} to ${isCompleted}`);
+        } catch (error) {
+            console.error("Error updating document: ", error);
+        }
     }
 
-    function downloadTodos() {
-        // Format todos as a numbered list
-        const formattedTodos = todos.map((todo, index) => `${index + 1}: ${todo}`).join('\n');
-    
-        // Create a Blob from the formatted todos
-        const blob = new Blob([formattedTodos], { type: 'text/plain' });
-    
-        // Create a URL for the Blob
-        const url = URL.createObjectURL(blob);
-    
-        // Create an <a> element to trigger the download
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'todos.txt';
-    
-        // Append the <a> element to the body and trigger the download
-        document.body.appendChild(a);
-        a.click();
-    
-        // Clean up
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+    function addTodoToDOM(todoTitle, id, isCompleted) {
+        console.log(`Adding to DOM: ${todoTitle}, ID: ${id}, Completed: ${isCompleted}`);
+        const li = document.createElement('li');
+        li.id = id;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isCompleted;
+        checkbox.addEventListener('change', function () {
+            toggleComplete(id, checkbox.checked);
+            const todoText = li.querySelector('span');
+            todoText.style.textDecoration = checkbox.checked ? 'line-through' : 'none';
+        });
+        li.appendChild(checkbox);
+
+        const todoSpan = document.createElement('span');
+        todoSpan.textContent = todoTitle || "No Text";
+        if (isCompleted) {
+            todoSpan.style.textDecoration = 'line-through';
+        }
+        li.appendChild(todoSpan);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.classList.add('delete');
+        deleteButton.addEventListener('click', function () {
+            deleteTodo(id);
+        });
+        li.appendChild(deleteButton);
+
+        todoList.appendChild(li);
     }
-    
 });
